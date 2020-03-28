@@ -1,4 +1,6 @@
 const express = require('express')
+const multer = require('multer')
+const sharp = require('sharp')
 const Task = require('../models/task')
 const auth = require('../middleware/auth')
 
@@ -98,6 +100,51 @@ router.patch('/tasks/:id', auth, async (req, res) => {
         res.send(task)
     } catch (e) {
         res.status(400).send(e)
+    }
+})
+
+const upload = multer({
+    limits: {
+        fileSize: 1_000_000
+    },
+    fileFilter(req, file, cb) {
+        if (!file.originalname.match(/\.(png|jpeg|jpg)$/)) {
+            cb(new Error('Please upload image file!'))
+        }
+        cb(undefined, true)
+    }
+})
+
+// Attach image to to-do
+router.post('/tasks/:id/image', auth, upload.single('image'), async (req, res) => {
+    const image = await sharp(req.file.buffer).resize(300, 300).png().toBuffer()
+    req.task.image = image
+    await req.task.save()
+    res.send()
+}, (error, req, res, next) => {
+    res.status(400).send({ error: error.message })
+})
+
+// Delete image
+router.delete('/tasks/:id/image', auth, async (req, res) => {
+    req.task.image = undefined
+    await req.task.save()
+    res.send()
+})
+
+// Open image in new tab
+router.get('/tasks/:id/image', async (req, res) => {
+    try {
+        const task = await Task.findById(req.params.id)
+
+        if (!task || !task.image) {
+            throw new Error()
+        }
+
+        res.set('Content-Type', 'image/png')
+        res.send(task.image)
+    } catch (e) {
+        res.status(404).send()
     }
 })
 
